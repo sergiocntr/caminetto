@@ -1,0 +1,34 @@
+#include <Arduino.h>
+#include <PID_v1.h>
+#define PWM_PIN 3
+const uint8_t min_value = 130;
+const uint8_t max_value = 160;
+const uint8_t step = 3;
+uint8_t value ;
+void setup() {
+  Serial.begin(9600);
+  pinMode(PWM_PIN, OUTPUT);
+  TCCR2B =( TCCR2B & B11111000) | B00000001; // for PWM frequency of 31372.55 Hz
+  //analogWrite(PWM_PIN, 200);
+  // delay(500);
+  value = min_value;
+}
+void setSpeed(uint8_t myspeed){
+ // if (myspeed <120) analogWrite(PWM_PIN, 200);
+  delay(100);
+  analogWrite(PWM_PIN, value);
+  
+}
+void loop() {
+  setSpeed( value);
+  Serial.println(value);
+  value+=step;
+  
+ delay(3500);
+  if (value > max_value){
+    value = min_value;
+    analogWrite(PWM_PIN, value);
+    delay(5000);
+  }
+  //delay(5000);
+}
