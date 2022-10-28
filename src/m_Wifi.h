@@ -18,11 +18,13 @@
 #include <topic.h>
 #include <myIP.h>
 #include "password.h"
+#include <m_def.h>
 namespace wifiK{
 WiFiClient mywifi;
 WiFiClient c;
 PubSubClient client(c);
-const uint8_t versione =8;
+const char* msg[] = {"","K_ALL_OK","K_EP_READ_FAIL","K_EP_READ_SUCCESS","K_PID_FAIL","K_EE_WRITE_REQ","K_EP_WRITE_FAIL","K_EP_WRITE_SUCCESS","K_SLEEP_REQUEST","K_REBOOT_REQUEST","K_FIRM_UPDATE"};
+    
 const char* myId ="caminetto";
 uint8_t mqttOK=0;
 const uint32_t wifi_check_time=10000L;
@@ -31,7 +33,16 @@ uint32_t wifi_initiate =0;
 float t_sondaK ;
 float t_sondaDS ;
 float OutPutPID;
-
+//QUESTO FA LAMPEGGIARE IL LED PER QUALCHE DEBUG...
+void blinkLed(uint8_t volte){
+  for (uint8_t i = 0; i < volte; i++)
+  {
+    digitalWrite(LED_BUILTIN,LOW);
+    delay(250);
+    digitalWrite(LED_BUILTIN,HIGH);
+    delay(250);
+  }
+}
 //QUESTO CODICE NON BLOCCANTE LO UTILIZZO AL POSTO DEL DELAY
 void smartDelay(uint32_t ms){
   uint32_t start = millis();
@@ -94,9 +105,16 @@ uint8_t checkForUpdates(uint8_t FW_VERSION) {
 
 //CALLBACK QUANDO IL MODULO RICEVE VIA MQTT QUALCHE MESSAGGIO =IN QUESTO CASO SOLO LA RICHIESTA DI PROCEDERE ALL'AGGIORNAMENTO FIRM)
 void callback(char* topic, byte* payload, unsigned int length) {
-  byte mioDato = payload[0];
+  if(strcmp(topic,systemTopic) == 0){
+    if (char(payload[0]) == '0') {
+      delay(10);
+      
+      cs = K_SLEEP_REQUEST;
+    }
+  }
   if(strcmp(topic,updateTopic) == 0){
     delay(10);
+    byte mioDato = payload[0];
     if(mioDato==52){ //
       client.publish(logTopic, "aggiornamento Caminetto");
       delay(10);
@@ -118,11 +136,42 @@ void callback(char* topic, byte* payload, unsigned int length) {
       }
     }
   }
+  
+  if(strcmp(topic, setupTopic) == 0 ) {
+    StaticJsonDocument<256> doc;
+    deserializeJson(doc, payload);
+    JsonObject root = doc.to<JsonObject>();
+    String msg_Topic = root["topic"];
+    if(msg_Topic == "cami") {
+      cs = K_EE_WRITE_REQ;
+      client.publish(logTopic, "agg val");
+      JsonVariant val = root["mF"];
+      if (!val.isNull()) {
+      settaggi.sMinFan = val.as<double>();
+      return;
+      }
+      val = root["MF"];
+      if (!val.isNull()) {
+      settaggi.sMaxFan = val.as<double>();
+      return;
+      }
+      val = root["OS"];
+      if (!val.isNull()) {
+      settaggi.sOffset = val.as<double>();
+      return;
+      }
+      val = root["sT"];
+      if (!val.isNull()) {
+      settaggi.sTemp = val.as<double>();
+      return;
+      }
+    }
+  }
 }
 
 //  ROUTINE PER CREARE JSON DA MANDARE VIA MQTT
 void sendThing() {
-  StaticJsonDocument<200> doc;
+  StaticJsonDocument<256> doc;
   delay(10);
   doc["topic"] = "Cami";
   delay(10);
@@ -131,6 +180,8 @@ void sendThing() {
   doc["K"] = t_sondaK;
   delay(10);
   doc["DS"] = t_sondaDS;
+  delay(10);
+  doc["stato"] = msg[cs];
   char buffer[256];
   delay(10);
   size_t n = serializeJson(doc, buffer);
@@ -140,19 +191,43 @@ void sendThing() {
   //Serial.println(mqttOK);
   smartDelay(100);
   //serializeJsonPretty(doc, Serial);
-  //if(mqttOK){Serial.println("OK!");}
+  cs = mqttOK ? K_ALL_OK : K_SLEEP_REQUEST;
 }
-
-//QUESTO FA LAMPEGGIARE IL LED PER QUALCHE DEBUG...
-void blinkLed(uint8_t volte){
-  for (uint8_t i = 0; i < volte; i++)
+void sendSetUp() {
+  StaticJsonDocument<512> doc;
+  delay(10);
+  doc["topic"] = "SCami";
+  delay(10);
+  doc["mF"] = settaggi.sMinFan;
+  delay(10);
+  doc["MF"] = settaggi.sMaxFan;
+  delay(10);
+  doc["OS"] = settaggi.sOffset;
+  delay(10);
+  doc["sT"] = settaggi.sTemp;
+  char buffer[512];
+  delay(10);
+  size_t n = serializeJson(doc, buffer);
+  delay(10);
+  mqttOK = client.publish(setupTopic, buffer,n);
+  //delay(10);
+  //Serial.println(mqttOK);
+  smartDelay(100);
+  //serializeJsonPretty(doc, Serial);
+  cs = mqttOK ? K_ALL_OK : K_SLEEP_REQUEST;
+}
+void sendStato() {
+  if(cs > 10) {
+    blinkLed(cs);
+  } // no wifi...
+  else
   {
-    digitalWrite(LED_BUILTIN,LOW);
-    delay(250);
-    digitalWrite(LED_BUILTIN,HIGH);
-    delay(250);
+    mqttOK = client.publish(setupTopic,msg[cs]);
+    smartDelay(100);
+    cs = mqttOK ? K_ALL_OK : K_SLEEP_REQUEST;
   }
 }
+
 
 //QUESTO SOTTOSCRIVE MQTT AI TOPIC 
 void reconnect() {
@@ -162,6 +237,11 @@ void reconnect() {
   client.subscribe(systemTopic);
   delay(10);
   mqttOK=client.subscribe(updateTopic);
+  cs = mqttOK ? K_ALL_OK : K_SLEEP_REQUEST;
+  smartDelay(250);
+  
+  sendStato();
+  
   smartDelay(50);
 }
 
@@ -198,6 +278,7 @@ void sendAlarm(uint8_t alNr) {
   smartDelay(250);
   mqttOK=client.publish(logTopic, s.c_str() );
   smartDelay(50);
+   cs = mqttOK ? K_ALL_OK : K_SLEEP_REQUEST;
 }
 
 void wifiOFF(){
@@ -214,9 +295,10 @@ void adessoDormo(){
   delay(10);
   wifiK::wifiOFF();
   delay(10);
-  system_deep_sleep_set_option(2);
-  system_deep_sleep_instant(360000*1000);
-  ESP.restart();
+  //system_deep_sleep_set_option(2);
+  //system_deep_sleep_instant(360000*1000);
+  delay(checkWifi);
+  cs = K_REBOOT_REQUEST;
 }
 
 
@@ -253,13 +335,13 @@ void startMqtt()
   wifi_initiate = millis();
   while (!client.connected()) {
     if ((millis() - wifi_initiate) > wifi_check_time) {
-      adessoDormo();
-      //dopo c'e' il restart
+      cs = K_SLEEP_REQUEST;
+      return;
     }
     delay(500);
   } 
   reconnect();
-  if(mqttOK){blinkLed(3);}
+  
 }
 
 //
@@ -267,12 +349,12 @@ void connWifi(){
   wifi_initiate = millis();
   while (WiFi.status() != WL_CONNECTED) {
     if ((millis() - wifi_initiate) > wifi_check_time) {
-      adessoDormo();
-      //dopo c'e' il restart
+      cs = K_SLEEP_REQUEST;
+      return;
     }
     delay(500);
   }
-  blinkLed(2);
+  cs = K_WIFI_OK;
   
 }
 }

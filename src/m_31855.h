@@ -1,4 +1,5 @@
 #include "MAX31855.h"
+#include <m_def.h>
 namespace sondaK{
 const uint8_t doPin = D5;
 const uint8_t csPin = D6;
@@ -15,7 +16,7 @@ void setupK()
   // Serial.println();
 
   tc.begin(clPin, csPin, doPin);
-  tc.setOffset(offset);
+  tc.setOffset(settaggi.sOffset);
 }
 
 

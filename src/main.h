@@ -13,8 +13,5 @@
 #include <m_ds18b20.h>
 #include <m_Pid.h>
 #include <m_Wifi.h>
-#include "MedianFilterLib.h"
-MedianFilter<float> medianFilterK(10);
-MedianFilter<float> medianFilterDS(10);
-unsigned long checkWifi= 300000;
-const uint8_t refTemp = 14;
+#include <m_def.h>
+#include <m_eeprom.h>
