@@ -23,10 +23,9 @@ namespace wifiK{
 WiFiClient mywifi;
 WiFiClient c;
 PubSubClient client(c);
-const char* msg[] = {"","K_ALL_OK","K_EP_READ_FAIL","K_EP_READ_SUCCESS","K_PID_FAIL","K_EE_WRITE_REQ","K_EP_WRITE_FAIL","K_EP_WRITE_SUCCESS","K_SLEEP_REQUEST","K_REBOOT_REQUEST","K_FIRM_UPDATE"};
     
-const char* myId ="caminetto";
-uint8_t mqttOK=0;
+//const char* CamiId ="caminetto";
+bool mqttOK=0;
 const uint32_t wifi_check_time=10000L;
 uint32_t wifi_initiate =0;
 //uint8_t wifi_reconnect_tries = 0;
@@ -57,7 +56,7 @@ void smartDelay(uint32_t ms){
 uint8_t checkForUpdates(uint8_t FW_VERSION) {
   uint8_t check=0;
   String fwURL = String( fwUrlBase );
-  fwURL.concat( myId ); //QUI DA VEDERE CON PERCORSO SERVER
+  fwURL.concat( CamiId ); //QUI DA VEDERE CON PERCORSO SERVER
   String fwVersionURL = fwURL;
   fwVersionURL.concat( "/version.php" );
   String fwImageURL = fwURL;
@@ -116,57 +115,49 @@ void callback(char* topic, byte* payload, unsigned int length) {
     delay(10);
     byte mioDato = payload[0];
     if(mioDato==52){ //
-      client.publish(logTopic, "aggiornamento Caminetto");
+      client.publish(logCamiTopic, "aggiornamento Caminetto");
       delay(10);
       uint8_t miocheck = 0;
       miocheck = checkForUpdates(versione);
       switch(miocheck) {
         case 1:
-          client.publish(logTopic, "HTTP_UPDATE_FAIL"); 
+          client.publish(logCamiTopic, "HTTP_UPDATE_FAIL"); 
           break;
         case 2:
-          client.publish(logTopic, "HTTP_UPDATE_NO_UPDATES");
+          client.publish(logCamiTopic, "HTTP_UPDATE_NO_UPDATES");
           break;
         case 0:
-          client.publish(logTopic, "Already on latest version" );
+          client.publish(logCamiTopic, "Already on latest version" );
           break;
         default:
-          //client.publish(logTopic, "Firmware version check failed, got HTTP response code " + String(miocheck));
+          //client.publish(logCamiTopic, "Firmware version check failed, got HTTP response code " + String(miocheck));
           break;
       }
     }
   }
   
-  if(strcmp(topic, setupTopic) == 0 ) {
+  else if(strcmp(topic, setupCamiTopic) == 0 ) {
     StaticJsonDocument<256> doc;
-    deserializeJson(doc, payload);
-    JsonObject root = doc.to<JsonObject>();
-    String msg_Topic = root["topic"];
-    if(msg_Topic == "cami") {
-      cs = K_EE_WRITE_REQ;
-      client.publish(logTopic, "agg val");
-      JsonVariant val = root["mF"];
-      if (!val.isNull()) {
-      settaggi.sMinFan = val.as<double>();
-      return;
-      }
-      val = root["MF"];
-      if (!val.isNull()) {
-      settaggi.sMaxFan = val.as<double>();
-      return;
-      }
-      val = root["OS"];
-      if (!val.isNull()) {
-      settaggi.sOffset = val.as<double>();
-      return;
-      }
-      val = root["sT"];
-      if (!val.isNull()) {
-      settaggi.sTemp = val.as<double>();
-      return;
-      }
-    }
+    DeserializationError er = deserializeJson(doc, payload);
+    smartDelay(10);
+    if(er) return;
+    const char* to = doc["topic"];
+    smartDelay(10);
+    DEBUG_PRINT(to);
+    if(strcmp(to,"AggCami") != 0) return;
+    cs = K_EE_WRITE_REQ; //flag
+    //client.publish(logCamiTopic, "agg val");
+    double camiVal = doc["sT"];
+    smartDelay(10);
+    if(camiVal > 0)  {settaggi.sTemp = camiVal;}
+    smartDelay(10);
+    camiVal = doc["mF"];
+    if(camiVal > 0)  {settaggi.sMinFan = camiVal;}
+    smartDelay(10);
+    camiVal = doc["MF"];
+    if(camiVal > 0)  {settaggi.sMaxFan = camiVal;}
   }
+  
 }
 
 //  ROUTINE PER CREARE JSON DA MANDARE VIA MQTT
@@ -202,14 +193,12 @@ void sendSetUp() {
   delay(10);
   doc["MF"] = settaggi.sMaxFan;
   delay(10);
-  doc["OS"] = settaggi.sOffset;
-  delay(10);
   doc["sT"] = settaggi.sTemp;
   char buffer[512];
   delay(10);
   size_t n = serializeJson(doc, buffer);
   delay(10);
-  mqttOK = client.publish(setupTopic, buffer,n);
+  mqttOK = client.publish(setupCamiTopic, buffer,n);
   //delay(10);
   //Serial.println(mqttOK);
   smartDelay(100);
@@ -217,31 +206,26 @@ void sendSetUp() {
   cs = mqttOK ? K_ALL_OK : K_SLEEP_REQUEST;
 }
 void sendStato() {
-  if(cs > 10) {
-    blinkLed(cs);
-  } // no wifi...
-  else
-  {
-    mqttOK = client.publish(setupTopic,msg[cs]);
+ 
+    mqttOK = client.publish(logCamiTopic,msg[cs]);
     smartDelay(100);
     cs = mqttOK ? K_ALL_OK : K_SLEEP_REQUEST;
-  }
+ 
 }
 
 
 //QUESTO SOTTOSCRIVE MQTT AI TOPIC 
 void reconnect() {
   smartDelay(50);
-  client.publish(logTopic, "Caminetto connesso");
+  client.publish(logCamiTopic, "Caminetto connesso");
   delay(10);
   client.subscribe(systemTopic);
   delay(10);
-  mqttOK=client.subscribe(updateTopic);
-  cs = mqttOK ? K_ALL_OK : K_SLEEP_REQUEST;
+  client.subscribe(updateTopic);
+  delay(10);
+  mqttOK=client.subscribe(setupCamiTopic);
   smartDelay(250);
-  
-  sendStato();
-  
+  cs = mqttOK ? K_ALL_OK : K_SLEEP_REQUEST;
   smartDelay(50);
 }
 
@@ -274,9 +258,9 @@ void sendAlarm(uint8_t alNr) {
     break;
   }
   smartDelay(50);
-  client.publish(logTopic, "Caminetto errore TC");
+  client.publish(logCamiTopic, "Caminetto errore TC");
   smartDelay(250);
-  mqttOK=client.publish(logTopic, s.c_str() );
+  mqttOK=client.publish(logCamiTopic, s.c_str() );
   smartDelay(50);
    cs = mqttOK ? K_ALL_OK : K_SLEEP_REQUEST;
 }
@@ -291,6 +275,8 @@ void wifiOFF(){
 
 //MANDO IL WEMOS A NANNA PER UN PO
 void adessoDormo(){
+
+  client.publish(logCamiTopic, "Spengo Caminetto");
   client.disconnect();
   delay(10);
   wifiK::wifiOFF();
@@ -311,7 +297,7 @@ void setupWifi(){
   WiFi.setOutputPower(14);        // 10dBm == 10mW, 14dBm = 25mW, 17dBm = 50mW, 20dBm = 100mW
   WiFi.mode(WIFI_OFF); //energy saving mode if local WIFI isn't connected
   delay(10);
-  WiFi.hostname(myId);      // DHCP Hostname (useful for finding device for static lease)
+  WiFi.hostname(CamiId);      // DHCP Hostname (useful for finding device for static lease)
   WiFi.mode(WIFI_STA);
   WiFi.forceSleepWake();
   delay(10);
@@ -323,7 +309,7 @@ void setupWifi(){
 //ROUTINE PER CONNESSIONE MQTT
 void startMqtt()
 {
-  String clientId = String("cam");
+  String clientId = String(CamiId);
   clientId += String(random(0xffff), HEX);
   delay(10);
   //randomSeed(micros());

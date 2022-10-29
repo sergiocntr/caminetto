@@ -16,7 +16,7 @@ void setupK()
   // Serial.println();
 
   tc.begin(clPin, csPin, doPin);
-  tc.setOffset(settaggi.sOffset);
+  
 }
 
 

@@ -8,10 +8,10 @@ namespace scPID{
 #define PIN_OUTPUT D1
 
 //Define Variables we'll be connecting to
-double Setpoint, _Input, _Output;
+double Setpoint = 1.5, _Input, _Output;
 //Specify the links and initial tuning parameters
-double Kp=1, Ki=0.05, Kd=0.25;
-//double Kp=5, Ki=4, Kd=1;
+//double Kp=1, Ki=0.05, Kd=0.25; //lento
+double Kp=5, Ki=4, Kd=1; //aggressivo
 PID myPID(&_Input, &_Output, &Setpoint, Kp, Ki, Kd, REVERSE);
 
 void setupPid()
