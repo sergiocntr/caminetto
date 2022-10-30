@@ -12,4 +12,6 @@ Lo scopo di questo progetto è di estrarre l'aria calda dalla cabina in cartonge
 <p></p>
 <p>Esempio visualizzazione</p><img src="pics/dati.jpg">
 <p></p>
+<p>Particolare regolazione parametri PID</p><img src="pics/setup.jpg">
+<p></p>
 <p>Scheda termocoppia</p><img src="pics/MAX31855.jpg">
