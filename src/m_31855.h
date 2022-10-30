@@ -1,12 +1,16 @@
 #include "MAX31855.h"
+MAX31855 tc;
 #include <m_def.h>
-namespace sondaK{
+#include "MedianFilterLib.h"
+MedianFilter<float> medianFilterK(10);
 const uint8_t doPin = D5;
 const uint8_t csPin = D6;
 const uint8_t clPin = D7;
-uint8_t errNr = 0;
-MAX31855 tc;
+
+namespace sondaK{
+
 float offset ;
+uint8_t errNr = 0;
 
 void setupK() 
 {
@@ -20,7 +24,7 @@ void setupK()
 }
 
 
-float getTemperature() {
+void getTemperature() {
 
   int status = tc.read();
   // Serial.print("stat:\t\t");
@@ -49,13 +53,15 @@ float getTemperature() {
   // Serial.print("internal:\t");
   // Serial.println(internal, 3);
   //tc.getStatus();
-  float temp = tc.getTemperature();
-
+  delay(10);
+  float t = tc.getTemperature();
+  kVal.t_K = medianFilterK.AddValue(t);
+  delay(10);
   
   // Serial.print("temperature:\t");
   // Serial.println(temp, 2);
   
-  return temp;
+  //return temp;
 }
 
 }

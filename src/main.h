@@ -15,3 +15,5 @@
 #include <m_Wifi.h>
 #include <m_def.h>
 #include <m_eeprom.h>
+void blinkLed(uint8_t volte);
+void checkStato();

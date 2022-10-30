@@ -12,8 +12,6 @@
   #include <HTTPUpdate.h>
 #endif  //ESP32
 #include <PubSubClient.h>
-//#include <ESP8266HTTPClient.h>
-
 #include <ArduinoJson.h>
 #include <topic.h>
 #include <myIP.h>
@@ -24,24 +22,9 @@ WiFiClient mywifi;
 WiFiClient c;
 PubSubClient client(c);
     
-//const char* CamiId ="caminetto";
 bool mqttOK=0;
 const uint32_t wifi_check_time=10000L;
 uint32_t wifi_initiate =0;
-//uint8_t wifi_reconnect_tries = 0;
-float t_sondaK ;
-float t_sondaDS ;
-float OutPutPID;
-//QUESTO FA LAMPEGGIARE IL LED PER QUALCHE DEBUG...
-void blinkLed(uint8_t volte){
-  for (uint8_t i = 0; i < volte; i++)
-  {
-    digitalWrite(LED_BUILTIN,LOW);
-    delay(250);
-    digitalWrite(LED_BUILTIN,HIGH);
-    delay(250);
-  }
-}
 //QUESTO CODICE NON BLOCCANTE LO UTILIZZO AL POSTO DEL DELAY
 void smartDelay(uint32_t ms){
   uint32_t start = millis();
@@ -52,7 +35,7 @@ void smartDelay(uint32_t ms){
   } while (millis() - start < ms);
 }
 
-//ROUTINE PER AGGIORNAMENTO FIRM VIA WB
+//ROUTINE PER AGGIORNAMENTO FIRM VIA WEB
 uint8_t checkForUpdates(uint8_t FW_VERSION) {
   uint8_t check=0;
   String fwURL = String( fwUrlBase );
@@ -108,14 +91,14 @@ void callback(char* topic, byte* payload, unsigned int length) {
     if (char(payload[0]) == '0') {
       delay(10);
       
-      cs = K_SLEEP_REQUEST;
+      ps = K_SLEEP_REQ;
     }
   }
   if(strcmp(topic,updateTopic) == 0){
     delay(10);
     byte mioDato = payload[0];
     if(mioDato==52){ //
-      client.publish(logCamiTopic, "aggiornamento Caminetto");
+      client.publish(logCamiTopic, "agg. Caminetto");
       delay(10);
       uint8_t miocheck = 0;
       miocheck = checkForUpdates(versione);
@@ -145,7 +128,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
     smartDelay(10);
     DEBUG_PRINT(to);
     if(strcmp(to,"AggCami") != 0) return;
-    cs = K_EE_WRITE_REQ; //flag
+    
     //client.publish(logCamiTopic, "agg val");
     double camiVal = doc["sT"];
     smartDelay(10);
@@ -156,6 +139,17 @@ void callback(char* topic, byte* payload, unsigned int length) {
     smartDelay(10);
     camiVal = doc["MF"];
     if(camiVal > 0)  {settaggi.sMaxFan = camiVal;}
+    camiVal = doc["P"];
+    smartDelay(10);
+    if(camiVal > 0)  {settaggi.P = camiVal;}
+    smartDelay(10);
+    camiVal = doc["I"];
+    if(camiVal > 0)  {settaggi.I = camiVal;}
+    smartDelay(10);
+    camiVal = doc["D"];
+    if(camiVal > 0)  {settaggi.D = camiVal;}
+    
+    ps = K_EE_WRITE_REQ; //flag
   }
   
 }
@@ -166,11 +160,11 @@ void sendThing() {
   delay(10);
   doc["topic"] = "Cami";
   delay(10);
-  doc["PID"] = OutPutPID;
+  doc["PID"] = kVal.pidVal;
   delay(10);
-  doc["K"] = t_sondaK;
+  doc["K"] = kVal.t_K;
   delay(10);
-  doc["DS"] = t_sondaDS;
+  doc["DS"] = kVal.t_DS;
   delay(10);
   doc["stato"] = msg[cs];
   char buffer[256];
@@ -180,9 +174,9 @@ void sendThing() {
   mqttOK = client.publish(casaSensTopic, buffer,n);
   //delay(10);
   //Serial.println(mqttOK);
-  smartDelay(100);
+  smartDelay(1000);
   //serializeJsonPretty(doc, Serial);
-  cs = mqttOK ? K_ALL_OK : K_SLEEP_REQUEST;
+ if(mqttOK)  {cs = K_ALL_OK;} else {ps = K_SLEEP_REQ;}
 }
 void sendSetUp() {
   StaticJsonDocument<512> doc;
@@ -194,6 +188,12 @@ void sendSetUp() {
   doc["MF"] = settaggi.sMaxFan;
   delay(10);
   doc["sT"] = settaggi.sTemp;
+  delay(10);
+  doc["P"] = settaggi.P;
+  delay(10);
+  doc["I"] = settaggi.I;
+  delay(10);
+  doc["D"] = settaggi.D;
   char buffer[512];
   delay(10);
   size_t n = serializeJson(doc, buffer);
@@ -201,15 +201,17 @@ void sendSetUp() {
   mqttOK = client.publish(setupCamiTopic, buffer,n);
   //delay(10);
   //Serial.println(mqttOK);
-  smartDelay(100);
+  smartDelay(1000);
   //serializeJsonPretty(doc, Serial);
-  cs = mqttOK ? K_ALL_OK : K_SLEEP_REQUEST;
+ // if(mqttOK)  cs = K_ALL_OK; else ps = K_SLEEP_REQ;
 }
 void sendStato() {
  
     mqttOK = client.publish(logCamiTopic,msg[cs]);
-    smartDelay(100);
-    cs = mqttOK ? K_ALL_OK : K_SLEEP_REQUEST;
+    smartDelay(1000);
+    mqttOK = client.publish(logCamiTopic,pmsg[ps]);
+    smartDelay(1000);
+ //   if(mqttOK)  cs = K_ALL_OK; else ps = K_SLEEP_REQ;
  
 }
 
@@ -217,7 +219,8 @@ void sendStato() {
 //QUESTO SOTTOSCRIVE MQTT AI TOPIC 
 void reconnect() {
   smartDelay(50);
-  client.publish(logCamiTopic, "Caminetto connesso");
+  String s = "Caminetto ver." + String(versione);
+  client.publish(logCamiTopic, s.c_str());
   delay(10);
   client.subscribe(systemTopic);
   delay(10);
@@ -225,7 +228,7 @@ void reconnect() {
   delay(10);
   mqttOK=client.subscribe(setupCamiTopic);
   smartDelay(250);
-  cs = mqttOK ? K_ALL_OK : K_SLEEP_REQUEST;
+  if(mqttOK)  cs = K_ALL_OK; else ps = K_SLEEP_REQ;
   smartDelay(50);
 }
 
@@ -262,7 +265,7 @@ void sendAlarm(uint8_t alNr) {
   smartDelay(250);
   mqttOK=client.publish(logCamiTopic, s.c_str() );
   smartDelay(50);
-   cs = mqttOK ? K_ALL_OK : K_SLEEP_REQUEST;
+  if(mqttOK)  cs = K_ALL_OK; else ps = K_SLEEP_REQ;
 }
 
 void wifiOFF(){
@@ -270,7 +273,7 @@ void wifiOFF(){
   delay(10);
   WiFi.mode(WIFI_OFF); //energy saving mode if local WIFI isn't connected
   WiFi.forceSleepBegin();
-  delay(1);
+  delay(10);
 }
 
 //MANDO IL WEMOS A NANNA PER UN PO
@@ -284,7 +287,7 @@ void adessoDormo(){
   //system_deep_sleep_set_option(2);
   //system_deep_sleep_instant(360000*1000);
   delay(checkWifi);
-  cs = K_REBOOT_REQUEST;
+  ps = K_REBOOT_REQ;
 }
 
 
@@ -321,7 +324,7 @@ void startMqtt()
   wifi_initiate = millis();
   while (!client.connected()) {
     if ((millis() - wifi_initiate) > wifi_check_time) {
-      cs = K_SLEEP_REQUEST;
+      ps = K_SLEEP_REQ;
       return;
     }
     delay(500);
@@ -335,12 +338,11 @@ void connWifi(){
   wifi_initiate = millis();
   while (WiFi.status() != WL_CONNECTED) {
     if ((millis() - wifi_initiate) > wifi_check_time) {
-      cs = K_SLEEP_REQUEST;
+      ps = K_SLEEP_REQ;
       return;
     }
     delay(500);
   }
   cs = K_WIFI_OK;
-  
 }
 }

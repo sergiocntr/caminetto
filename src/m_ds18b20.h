@@ -1,5 +1,8 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include <m_def.h>
+#include "MedianFilterLib.h"
+MedianFilter<float> medianFilterDS(10);
 const uint8_t ONE_WIRE_BUS = D3;
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature DS18B20(&oneWire);
@@ -10,7 +13,7 @@ void setupDS()
  DS18B20.begin();
 }
 
-float getTemperature() {
+void getTemperature() {
   float temp=22.2;
   DS18B20.requestTemperatures();
   delay(10);
@@ -20,8 +23,8 @@ float getTemperature() {
     temp =(temp * 5) / 5;
   delay(10);
   //Serial.println(temp);
-   
-  return temp;
+  kVal.t_DS= medianFilterDS.AddValue(temp);
+  delay(10);
 }
 
 }
